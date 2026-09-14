@@ -29,6 +29,13 @@ function doGet(e) {
       if (e.parameter.pin !== ADMIN_PIN) return json({ error: 'unauthorized' });
       return json({ ok: true, items: listApplications() });
     }
+    if (action === 'lookup') {
+      // 신청자가 로그인 없이 신청번호만으로 자기 신청 현황을 확인하는 용도.
+      // 신청번호를 정확히 알아야만 해당 1건만 조회되므로 목록 전체 노출 위험은 없음.
+      const item = findApplicationById_(e.parameter.id || '');
+      if (!item) return json({ error: 'id_not_found' });
+      return json({ ok: true, item: publicView_(item) });
+    }
     return json({ error: 'unknown_action' });
   } catch (err) {
     return json({ error: String(err) });
@@ -132,6 +139,30 @@ function listApplications() {
     .sort(function (a, b) {
       return String(b['접수일시'] || '').localeCompare(String(a['접수일시'] || ''));
     });
+}
+
+function findApplicationById_(id) {
+  if (!id) return null;
+  const items = listApplications();
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].id === id) return items[i];
+  }
+  return null;
+}
+
+// 신청자 조회 화면에 내보낼 항목만 추림 (검토자 이름 등 내부 정보는 제외)
+function publicView_(it) {
+  return {
+    id: it['id'],
+    학과: it['학과'],
+    교수명: it['교수명'],
+    희망일자: it['희망일자'],
+    희망시간: it['희망시간'],
+    희망장소: it['희망장소'],
+    접수일시: it['접수일시'],
+    상태: it['상태'],
+    검토의견: it['검토의견'] || ''
+  };
 }
 
 function updateStatus(id, status, reviewer, comment) {

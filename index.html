@@ -150,6 +150,7 @@
     </div>
     <nav class="tabs">
       <button id="tabApplyBtn" class="active">학과 신청</button>
+      <button id="tabLookupBtn">신청 조회</button>
       <button id="tabAdminBtn">센터 관리자</button>
     </nav>
   </header>
@@ -167,8 +168,11 @@
       <div class="big">✅</div>
       <h2>신청이 접수되었습니다</h2>
       <div class="idline" id="successId"></div>
-      <p class="hint">신청번호를 캡처해 두시면 문의 시 빠르게 확인해 드릴 수 있습니다.</p>
-      <button class="btn secondary" id="newApplyBtn">새 신청서 작성</button>
+      <p class="hint">신청번호를 캡처해 두시면 진행 상태를 직접 조회하거나 문의 시 빠르게 확인해 드릴 수 있습니다.</p>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+        <button class="btn secondary" id="newApplyBtn">새 신청서 작성</button>
+        <button class="btn secondary" id="successLookupBtn">지금 상태 조회하기</button>
+      </div>
     </div>
 
     <form id="applyForm">
@@ -216,6 +220,20 @@
       <div id="applyMsg"></div>
       <button type="submit" class="btn block" id="submitBtn">신청서 제출</button>
     </form>
+  </section>
+
+  <!-- ===================== 신청 조회 화면 ===================== -->
+  <section id="lookupView" hidden>
+    <div class="card">
+      <h2>신청 조회</h2>
+      <div class="hint">신청 시 발급받은 신청번호를 입력하면 현재 진행 상태를 확인할 수 있습니다.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input type="text" id="lookupIdInput" placeholder="예: FLEX-20260914-215850-555" style="flex:1;min-width:200px;" autocomplete="off" />
+        <button class="btn" id="lookupBtn">조회</button>
+      </div>
+      <div id="lookupMsg"></div>
+    </div>
+    <div class="card" id="lookupResult" hidden></div>
   </section>
 
   <!-- ===================== 관리자 화면 ===================== -->
@@ -312,7 +330,7 @@
    Apps Script 웹앱 배포 후 발급받은 /exec URL을 아래에 붙여넣으세요.
    (README.md 참고) */
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD-CVIxzi1E5OXTN5H51Qv30rjkSLeOHd5ULWvAz-6k-_28GQ9hYuSDvZIZawKua9T/exec';
-const APP_VERSION = 'v0.7'; // 버전 표시 (제목 옆 배지). 수정할 때마다 올려주세요.
+const APP_VERSION = 'v0.8'; // 버전 표시 (제목 옆 배지). 수정할 때마다 올려주세요.
 
 const state = { pin: '', items: [], filtered: [], activeId: null };
 
@@ -342,23 +360,42 @@ function apiPost(payload){
 /* ---------- 탭 전환 ---------- */
 function showApply(){
   $('#applyView').hidden = false;
+  $('#lookupView').hidden = true;
   $('#adminView').hidden = true;
   $('#tabApplyBtn').classList.add('active');
+  $('#tabLookupBtn').classList.remove('active');
   $('#tabAdminBtn').classList.remove('active');
   location.hash = '';
 }
+function showLookup(prefillId){
+  $('#applyView').hidden = true;
+  $('#lookupView').hidden = false;
+  $('#adminView').hidden = true;
+  $('#tabApplyBtn').classList.remove('active');
+  $('#tabLookupBtn').classList.add('active');
+  $('#tabAdminBtn').classList.remove('active');
+  location.hash = 'lookup';
+  if (prefillId){
+    $('#lookupIdInput').value = prefillId;
+    runLookup();
+  }
+}
 function showAdmin(){
   $('#applyView').hidden = true;
+  $('#lookupView').hidden = true;
   $('#adminView').hidden = false;
   $('#tabApplyBtn').classList.remove('active');
+  $('#tabLookupBtn').classList.remove('active');
   $('#tabAdminBtn').classList.add('active');
   location.hash = 'admin';
   if (state.pin) enterAdmin(state.pin, true);
 }
 $('#tabApplyBtn').addEventListener('click', showApply);
+$('#tabLookupBtn').addEventListener('click', () => showLookup());
 $('#tabAdminBtn').addEventListener('click', showAdmin);
 $('#footerAdminLink').addEventListener('click', e => { e.preventDefault(); showAdmin(); });
 if (location.hash === '#admin') showAdmin();
+else if (location.hash === '#lookup') showLookup();
 
 /* ---------- 희망 일자: 잘못된 날짜 자체를 입력할 수 없게 만드는 마스크 입력 ----------
    원리: 키 입력마다 "지금까지 입력된 숫자"를 한 자리씩 다시 검사해서, 그 자리에 넣었을 때
@@ -466,9 +503,61 @@ $('#newApplyBtn').addEventListener('click', () => {
   $('#applyForm').hidden = false;
   $('#applySuccess').hidden = true;
 });
+$('#successLookupBtn').addEventListener('click', () => {
+  showLookup($('#successId').textContent.trim());
+});
 function renderMsg(sel, kind, text){
   $(sel).innerHTML = '<div class="msg ' + kind + '">' + text + '</div>';
 }
+
+/* ---------- 신청 조회 (신청번호로 상태 확인, 로그인 불필요) ---------- */
+function runLookup(){
+  const id = $('#lookupIdInput').value.trim();
+  $('#lookupResult').hidden = true;
+  $('#lookupMsg').innerHTML = '';
+  if (!id){
+    renderMsg('#lookupMsg', 'error', '신청번호를 입력해 주세요.');
+    return;
+  }
+  if (APPS_SCRIPT_URL.indexOf('REPLACE_WITH') === 0){
+    renderMsg('#lookupMsg', 'error', '아직 Apps Script 주소가 연결되지 않았습니다. (관리자에게 문의)');
+    return;
+  }
+  const btn = $('#lookupBtn');
+  btn.disabled = true; btn.textContent = '조회 중...';
+  apiGet({ action:'lookup', id: id })
+    .then(res => {
+      if (res.error === 'id_not_found'){
+        renderMsg('#lookupMsg', 'error', '해당 신청번호를 찾을 수 없습니다. 신청번호를 다시 확인해 주세요.');
+        return;
+      }
+      if (res.error) throw new Error(res.error);
+      renderLookupResult(res.item);
+    })
+    .catch(() => renderMsg('#lookupMsg', 'error', '조회 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.'))
+    .finally(() => { btn.disabled = false; btn.textContent = '조회'; });
+}
+function renderLookupResult(it){
+  const rows = [
+    ['신청번호', it['id']],
+    ['학과(부)명', it['학과']],
+    ['교수명', it['교수명']],
+    ['희망일시', wishDateTime(it)],
+    ['희망장소', it['희망장소']],
+    ['접수일시', fmtDateTime(it['접수일시'])]
+  ].filter(([,v]) => v).map(([k,v]) =>
+    '<div class="kv"><b>' + k + '</b><div class="val">' + esc(v) + '</div></div>'
+  ).join('');
+  const commentRow = it['검토의견']
+    ? '<div class="kv"><b>검토 의견</b><div class="val">' + esc(it['검토의견']) + '</div></div>'
+    : '';
+  $('#lookupResult').innerHTML =
+    '<h2 style="margin-top:0;">현재 상태: <span class="badge ' + esc(it['상태']) + '">' + esc(it['상태']) + '</span></h2>' +
+    rows + commentRow;
+  $('#lookupResult').hidden = false;
+}
+$('#lookupBtn').addEventListener('click', runLookup);
+$('#lookupIdInput').addEventListener('keydown', e => { if (e.key === 'Enter') runLookup(); });
 
 /* ---------- 접수 마감 여부 확인 (학과 화면 진입 시) ---------- */
 function showApplyClosed(){
