@@ -7,9 +7,18 @@
  * 배포 방법은 README.md를 참고하세요.
  */
 
-// ⚠️ 반드시 변경하세요. 관리자 화면 진입 및 승인/반려에 사용되는 PIN입니다.
-// (완전한 보안 수단은 아니며, 관리자 링크를 아는 사람만 접근한다는 정도의 가벼운 방어입니다.)
-const ADMIN_PIN = '0070';
+// ⚠️ 반드시 각각 변경하세요. (완전한 보안 수단은 아니며, PIN을 아는 사람만 접근한다는 정도의 가벼운 방어입니다.)
+// - 전체 관리자 PIN: 조회 + 검토(검토중/승인/반려) + 삭제 + 접수 마감·재개까지 기존 관리자 권한 전부
+// - 센터 관리자 PIN: 목록 조회만 가능 (상태 변경/삭제/접수 마감·재개 불가)
+const FULL_ADMIN_PIN = '0070';
+const CENTER_ADMIN_PIN = '7563';
+
+// 입력된 PIN이 어느 역할에 해당하는지 판별 ('full' | 'center' | null)
+function adminRole_(pin) {
+  if (pin === FULL_ADMIN_PIN) return 'full';
+  if (pin === CENTER_ADMIN_PIN) return 'center';
+  return null;
+}
 
 const SHEET_NAME = '신청현황';
 
@@ -26,8 +35,9 @@ function doGet(e) {
     if (action === 'ping') return json({ ok: true });
     if (action === 'status') return json({ ok: true, accepting: isAccepting_() });
     if (action === 'list') {
-      if (e.parameter.pin !== ADMIN_PIN) return json({ error: 'unauthorized' });
-      return json({ ok: true, items: listApplications() });
+      const role = adminRole_(e.parameter.pin);
+      if (!role) return json({ error: 'unauthorized' });
+      return json({ ok: true, items: listApplications(), role: role });
     }
     if (action === 'lookup') {
       // 신청자가 로그인 없이 신청번호만으로 자기 신청 현황을 확인하는 용도.
@@ -54,19 +64,25 @@ function doPost(e) {
     }
 
     if (action === 'updateStatus') {
-      if (body.pin !== ADMIN_PIN) return json({ error: 'unauthorized' });
+      const role = adminRole_(body.pin);
+      if (!role) return json({ error: 'unauthorized' });
+      if (role !== 'full') return json({ error: 'forbidden' }); // 센터 관리자는 상태 변경 불가
       updateStatus(body.id, body.status, body.reviewer || '', body.comment || '');
       return json({ ok: true });
     }
 
     if (action === 'setStatus') {
-      if (body.pin !== ADMIN_PIN) return json({ error: 'unauthorized' });
+      const role = adminRole_(body.pin);
+      if (!role) return json({ error: 'unauthorized' });
+      if (role !== 'full') return json({ error: 'forbidden' }); // 센터 관리자는 접수 마감/재개 불가
       setAccepting_(!!body.accepting);
       return json({ ok: true, accepting: isAccepting_() });
     }
 
     if (action === 'delete') {
-      if (body.pin !== ADMIN_PIN) return json({ error: 'unauthorized' });
+      const role = adminRole_(body.pin);
+      if (!role) return json({ error: 'unauthorized' });
+      if (role !== 'full') return json({ error: 'forbidden' }); // 센터 관리자는 삭제 불가
       deleteApplication(body.id);
       return json({ ok: true });
     }

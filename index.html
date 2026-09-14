@@ -69,6 +69,8 @@
     font-size:.68rem;font-weight:700;color:var(--muted);
     background:#eef0f5;border-radius:999px;padding:2px 9px;
   }
+  .version-badge.role-center{background:var(--warn-bg);color:var(--warn);}
+  .version-badge.role-full{background:var(--ok-bg);color:var(--ok);}
 
   .date-combo{position:relative;}
   .date-combo input[type=text]{padding-right:42px;}
@@ -109,9 +111,15 @@
 
   .stat-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;}
   @media (max-width:640px){.stat-row{grid-template-columns:repeat(2,1fr);}}
-  .stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;}
+  .stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;cursor:pointer;user-select:none;transition:box-shadow .12s,border-color .12s;}
+  .stat:hover{border-color:var(--accent);}
+  .stat.active{border-color:var(--accent);box-shadow:0 0 0 2px rgba(52,84,209,.18);}
   .stat .n{font-size:1.4rem;font-weight:800;}
   .stat .l{font-size:.76rem;color:var(--muted);margin-top:2px;}
+
+  tr.row.dup{background:var(--bad-bg);}
+  tr.row.dup:hover{background:#f7d9d3;}
+  .dup-badge{display:inline-block;margin-left:6px;font-size:.72rem;font-weight:800;color:var(--bad);white-space:nowrap;}
 
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
   .toolbar input[type=text]{flex:1;min-width:160px;}
@@ -240,8 +248,8 @@
   <section id="adminView" hidden>
 
     <div id="pinScreen" class="card pin-box">
-      <h2>센터 관리자 로그인</h2>
-      <div class="hint">관리자 PIN을 입력해 주세요.</div>
+      <h2>관리자 로그인</h2>
+      <div class="hint">관리자 PIN을 입력해 주세요. (전체 관리자 / 센터 관리자 PIN 모두 사용 가능)</div>
       <div class="field"><input type="text" id="pinInput" inputmode="numeric" placeholder="PIN" /></div>
       <div id="pinMsg"></div>
       <button class="btn block" id="pinSubmit">확인</button>
@@ -250,18 +258,18 @@
     <div id="adminPanel" hidden>
       <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
         <div>
-          <div style="font-weight:700;">접수 상태</div>
+          <div style="font-weight:700;">접수 상태 <span class="version-badge" id="roleBadge"></span></div>
           <div style="color:var(--muted);font-size:.85rem;margin-top:2px;" id="acceptingStatusText">확인 중...</div>
         </div>
         <button class="btn" id="toggleAcceptingBtn" disabled>확인 중...</button>
       </div>
 
       <div class="stat-row">
-        <div class="stat"><div class="n" id="stAll">0</div><div class="l">전체</div></div>
-        <div class="stat"><div class="n" id="st접수">0</div><div class="l">접수</div></div>
-        <div class="stat"><div class="n" id="st검토중">0</div><div class="l">검토중</div></div>
-        <div class="stat"><div class="n" id="st승인">0</div><div class="l">승인</div></div>
-        <div class="stat"><div class="n" id="st반려">0</div><div class="l">반려</div></div>
+        <div class="stat" data-status="" title="클릭하면 전체 목록을 봅니다"><div class="n" id="stAll">0</div><div class="l">전체</div></div>
+        <div class="stat" data-status="접수" title="클릭하면 접수 상태만 봅니다"><div class="n" id="st접수">0</div><div class="l">접수</div></div>
+        <div class="stat" data-status="검토중" title="클릭하면 검토중만 봅니다"><div class="n" id="st검토중">0</div><div class="l">검토중</div></div>
+        <div class="stat" data-status="승인" title="클릭하면 승인만 봅니다"><div class="n" id="st승인">0</div><div class="l">승인</div></div>
+        <div class="stat" data-status="반려" title="클릭하면 반려만 봅니다"><div class="n" id="st반려">0</div><div class="l">반려</div></div>
       </div>
 
       <div class="card">
@@ -305,7 +313,11 @@
     <div class="meta" id="mMeta"></div>
     <div id="mBody"></div>
 
-    <div class="section">
+    <div class="section" id="centerReadonlyNote" hidden>
+      <div class="hint" style="margin:0;">센터 관리자는 조회만 가능합니다. 상태 변경·삭제가 필요하면 전체 관리자에게 요청해 주세요.</div>
+    </div>
+
+    <div class="section" id="reviewSection">
       <label>검토자</label>
       <input type="text" id="reviewerInput" placeholder="검토자 성명" />
       <div style="height:10px"></div>
@@ -319,7 +331,7 @@
       </div>
     </div>
 
-    <div class="section" style="border-top:1px dashed var(--border);">
+    <div class="section" id="deleteSection" style="border-top:1px dashed var(--border);">
       <button class="btn secondary" id="deleteBtn" style="color:var(--bad);border-color:var(--bad);">이 신청 삭제</button>
     </div>
   </div>
@@ -330,9 +342,9 @@
    Apps Script 웹앱 배포 후 발급받은 /exec URL을 아래에 붙여넣으세요.
    (README.md 참고) */
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD-CVIxzi1E5OXTN5H51Qv30rjkSLeOHd5ULWvAz-6k-_28GQ9hYuSDvZIZawKua9T/exec';
-const APP_VERSION = 'v0.8'; // 버전 표시 (제목 옆 배지). 수정할 때마다 올려주세요.
+const APP_VERSION = 'v0.9'; // 버전 표시 (제목 옆 배지). 수정할 때마다 올려주세요.
 
-const state = { pin: '', items: [], filtered: [], activeId: null };
+const state = { pin: '', role: '', items: [], filtered: [], activeId: null };
 
 /* ---------- 공통 유틸 ---------- */
 function $(sel){ return document.querySelector(sel); }
@@ -596,9 +608,11 @@ function enterAdmin(pin, silent){
         return;
       }
       state.pin = pin;
+      state.role = res.role || 'full'; // 구버전 백엔드(역할 구분 이전) 호환: 값이 없으면 전체 관리자로 취급
       try { sessionStorage.setItem('flexday_pin', pin); } catch(e){}
       state.items = res.items || [];
       $('#pinScreen').hidden = true; $('#adminPanel').hidden = false;
+      applyRoleUI();
       renderTable();
       refreshAcceptingStatus();
     })
@@ -616,11 +630,22 @@ try {
   if (saved) $('#pinInput').value = saved;
 } catch(e){}
 
+/* ---------- 관리자: 역할(전체/센터)에 따른 화면 구성 ----------
+   센터 관리자는 조회만 가능하고, 상태 변경/삭제/접수 마감·재개는 할 수 없다. */
+function applyRoleUI(){
+  const isFull = state.role === 'full';
+  const badge = $('#roleBadge');
+  badge.textContent = isFull ? '전체 관리자' : '센터 관리자 (조회 전용)';
+  badge.className = 'version-badge ' + (isFull ? 'role-full' : 'role-center');
+  $('#toggleAcceptingBtn').hidden = !isFull;
+}
+
 /* ---------- 관리자: 접수 마감/재개 ---------- */
 let acceptingState = true;
 function renderAcceptingUI(){
   const txt = $('#acceptingStatusText');
   const btn = $('#toggleAcceptingBtn');
+  if (state.role !== 'full'){ btn.hidden = true; }
   btn.disabled = false;
   if (acceptingState){
     txt.textContent = '🟢 현재 접수를 받고 있습니다.';
@@ -638,6 +663,7 @@ function refreshAcceptingStatus(){
     .catch(() => { acceptingState = true; renderAcceptingUI(); });
 }
 $('#toggleAcceptingBtn').addEventListener('click', () => {
+  if (state.role !== 'full') return; // 센터 관리자는 접수 마감/재개 불가
   const btn = $('#toggleAcceptingBtn');
   btn.disabled = true;
   apiPost({ action:'setStatus', pin: state.pin, accepting: !acceptingState })
@@ -654,6 +680,32 @@ $('#toggleAcceptingBtn').addEventListener('click', () => {
 $('#refreshBtn').addEventListener('click', () => { enterAdmin(state.pin, true); refreshAcceptingStatus(); });
 $('#searchInput').addEventListener('input', renderTable);
 $('#statusFilter').addEventListener('change', renderTable);
+
+/* 상단 전체/접수/검토중/승인/반려 카드를 클릭하면 그 상태만 필터링 */
+$all('.stat').forEach(el => {
+  el.addEventListener('click', () => {
+    $('#statusFilter').value = el.getAttribute('data-status');
+    renderTable();
+  });
+});
+
+/* ---------- 관리자: 같은 날짜·시간 중복 접수 감지 ----------
+   반려된 건은 더 이상 실제로 그 시간을 쓰지 않는 것으로 보고 중복 계산에서 제외한다. */
+function computeDupCounts(allItems){
+  const counts = {};
+  allItems.forEach(it => {
+    if (it['상태'] === '반려') return;
+    const key = wishDateTime(it);
+    if (!key) return;
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return counts;
+}
+function isDupItem(it, dupCounts){
+  if (it['상태'] === '반려') return false;
+  const key = wishDateTime(it);
+  return !!key && dupCounts[key] > 1;
+}
 
 let wishSortDir = null; // null | 'asc' | 'desc'
 $('#thWishDateTime').addEventListener('click', () => {
@@ -686,18 +738,22 @@ function renderTable(){
   $('#st검토중').textContent = counts.검토중;
   $('#st승인').textContent = counts.승인;
   $('#st반려').textContent = counts.반려;
+  $all('.stat').forEach(el => el.classList.toggle('active', el.getAttribute('data-status') === statusF));
+
+  const dupCounts = computeDupCounts(state.items);
 
   const tbody = $('#tableBody');
   tbody.innerHTML = '';
   $('#emptyMsg').hidden = items.length > 0;
   items.forEach(it => {
+    const dup = isDupItem(it, dupCounts);
     const tr = document.createElement('tr');
-    tr.className = 'row';
+    tr.className = 'row' + (dup ? ' dup' : '');
     tr.innerHTML =
       '<td>' + esc(fmtDateTime(it['접수일시'])) + '</td>' +
       '<td>' + esc(it['학과']) + '</td>' +
       '<td>' + esc(it['교수명']) + '</td>' +
-      '<td>' + esc(wishDateTime(it)) + '</td>' +
+      '<td>' + esc(wishDateTime(it)) + (dup ? ' <span class="dup-badge" title="같은 날짜·시간에 다른 신청이 있습니다">⚠️ 중복 ' + dupCounts[wishDateTime(it)] + '건</span>' : '') + '</td>' +
       '<td>' + esc(it['희망장소']) + '</td>' +
       '<td>' + esc(it['예상인원']) + '</td>' +
       '<td><span class="badge ' + esc(it['상태']) + '">' + esc(it['상태']) + '</span></td>';
@@ -761,7 +817,11 @@ function openDetail(id){
   state.activeId = id;
   $('#mTitle').textContent = (it['학과'] || '(학과 미기재)') + ' · ' + (it['교수명'] || '');
   $('#mMeta').textContent = it['id'] + ' · 접수 ' + fmtDateTime(it['접수일시']);
-  $('#mBody').innerHTML = [
+  const dupCounts = computeDupCounts(state.items);
+  const dupWarning = isDupItem(it, dupCounts)
+    ? '<div class="msg error">⚠️ 같은 날짜·시간(' + esc(wishDateTime(it)) + ')에 다른 신청이 ' + (dupCounts[wishDateTime(it)] - 1) + '건 더 있습니다. 일정이 겹치지 않는지 확인해 주세요.</div>'
+    : '';
+  $('#mBody').innerHTML = dupWarning + [
     ['희망일시', wishDateTime(it)],
     ['희망장소', it['희망장소']], ['참여대상', it['참여대상']], ['예상인원', it['예상인원']],
     ['협조요청', it['협조요청']],
@@ -774,6 +834,10 @@ function openDetail(id){
   $('#reviewerInput').value = it['검토자'] || '';
   $('#commentInput').value = '';
   $('#reviewMsg').innerHTML = '';
+  const isFull = state.role === 'full';
+  $('#reviewSection').hidden = !isFull;
+  $('#deleteSection').hidden = !isFull;
+  $('#centerReadonlyNote').hidden = isFull;
   $('#detailOverlay').hidden = false;
 }
 $('#closeModal').addEventListener('click', () => $('#detailOverlay').hidden = true);
@@ -781,6 +845,7 @@ $('#detailOverlay').addEventListener('click', e => { if (e.target.id === 'detail
 
 $all('.review-actions button').forEach(btn => {
   btn.addEventListener('click', () => {
+    if (state.role !== 'full') return; // 센터 관리자는 상태 변경 불가
     const status = btn.getAttribute('data-status');
     const reviewer = $('#reviewerInput').value.trim();
     const comment = $('#commentInput').value.trim();
@@ -801,6 +866,7 @@ $all('.review-actions button').forEach(btn => {
 });
 
 $('#deleteBtn').addEventListener('click', () => {
+  if (state.role !== 'full') return; // 센터 관리자는 삭제 불가
   const it = state.items.find(x => x['id'] === state.activeId);
   const label = it ? (it['학과'] + ' · ' + it['교수명']) : state.activeId;
   if (!confirm('정말로 이 신청을 삭제할까요?\n(' + label + ')\n삭제하면 되돌릴 수 없습니다.')) return;
