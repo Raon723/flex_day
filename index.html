@@ -265,7 +265,8 @@
             <thead>
               <tr>
                 <th>접수일시</th><th>학과</th><th>교수명</th>
-                <th>희망일시</th><th>희망장소</th><th>인원</th><th>상태</th>
+                <th id="thWishDateTime" style="cursor:pointer;user-select:none;" title="클릭하면 희망일시 순으로 정렬됩니다">희망일시 <span id="wishSortArrow"></span></th>
+                <th>희망장소</th><th>인원</th><th>상태</th>
               </tr>
             </thead>
             <tbody id="tableBody"></tbody>
@@ -299,6 +300,10 @@
         <button class="btn bad" data-status="반려">반려</button>
       </div>
     </div>
+
+    <div class="section" style="border-top:1px dashed var(--border);">
+      <button class="btn secondary" id="deleteBtn" style="color:var(--bad);border-color:var(--bad);">이 신청 삭제</button>
+    </div>
   </div>
 </div>
 
@@ -307,7 +312,7 @@
    Apps Script 웹앱 배포 후 발급받은 /exec URL을 아래에 붙여넣으세요.
    (README.md 참고) */
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby3izeRTJKyLYb-xtyj8vIi2SvsqwDWiR8jqACq-AnNbOxXNccVc2PDcCCVhbmzfn9ahA/exec';
-const APP_VERSION = 'v0.6'; // 버전 표시 (제목 옆 배지). 수정할 때마다 올려주세요.
+const APP_VERSION = 'v0.7'; // 버전 표시 (제목 옆 배지). 수정할 때마다 올려주세요.
 
 const state = { pin: '', items: [], filtered: [], activeId: null };
 
@@ -556,20 +561,33 @@ $('#toggleAcceptingBtn').addEventListener('click', () => {
     .finally(() => { btn.disabled = false; });
 });
 
-/* ---------- 관리자: 목록/필터 ---------- */
+/* ---------- 관리자: 목록/필터/정렬 ---------- */
 $('#refreshBtn').addEventListener('click', () => { enterAdmin(state.pin, true); refreshAcceptingStatus(); });
 $('#searchInput').addEventListener('input', renderTable);
 $('#statusFilter').addEventListener('change', renderTable);
 
+let wishSortDir = null; // null | 'asc' | 'desc'
+$('#thWishDateTime').addEventListener('click', () => {
+  wishSortDir = wishSortDir === 'asc' ? 'desc' : 'asc';
+  renderTable();
+});
+
 function renderTable(){
   const q = $('#searchInput').value.trim().toLowerCase();
   const statusF = $('#statusFilter').value;
-  const items = state.items.filter(it => {
+  let items = state.items.filter(it => {
     if (statusF && it['상태'] !== statusF) return false;
     if (!q) return true;
     const hay = [it['학과'], it['교수명'], it['id']].join(' ').toLowerCase();
     return hay.indexOf(q) !== -1;
   });
+  if (wishSortDir){
+    items = items.slice().sort((a, b) => {
+      const ka = wishSortKey(a), kb = wishSortKey(b);
+      return wishSortDir === 'asc' ? ka.localeCompare(kb) : kb.localeCompare(ka);
+    });
+  }
+  $('#wishSortArrow').textContent = wishSortDir === 'asc' ? '▲' : (wishSortDir === 'desc' ? '▼' : '');
   state.filtered = items;
 
   const counts = { 전체: state.items.length, 접수:0, 검토중:0, 승인:0, 반려:0 };
@@ -587,7 +605,7 @@ function renderTable(){
     const tr = document.createElement('tr');
     tr.className = 'row';
     tr.innerHTML =
-      '<td>' + esc(it['접수일시']) + '</td>' +
+      '<td>' + esc(fmtDateTime(it['접수일시'])) + '</td>' +
       '<td>' + esc(it['학과']) + '</td>' +
       '<td>' + esc(it['교수명']) + '</td>' +
       '<td>' + esc(wishDateTime(it)) + '</td>' +
@@ -602,7 +620,49 @@ function esc(v){
   return String(v == null ? '' : v).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 }
 function wishDateTime(it){
-  return [it['희망일자'], it['희망시간']].filter(Boolean).join(' ');
+  return [fmtDateOnly(it['희망일자']), it['희망시간']].filter(Boolean).join(' ');
+}
+// 구글 시트가 날짜 문자열을 자동으로 Date로 바꿔버리는 경우까지 대비해,
+// 어떤 형태로 오든 "YYYY-MM-DD HH:mm" / "YYYY-MM-DD"로 통일해서 보여준다.
+// 'Z'로 끝나거나 명시적 시간대 오프셋이 있으면 (구글 시트가 문자열을 진짜 Date로
+// 바꿔버린 뒤 JSON으로 직렬화된 UTC 값) 그대로 잘라 쓰지 않고 실제 Date로 파싱해서
+// 서울 시간대로 변환한다. 그 외(우리가 저장한 순수 텍스트)는 있는 그대로 사용한다.
+function isUtcIsoString(s){
+  return /Z$/.test(s) || /[+-]\d{2}:\d{2}$/.test(s);
+}
+function fmtDateTime(raw){
+  if (!raw) return '';
+  const s = String(raw);
+  if (!isUtcIsoString(s)){
+    const m = s.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+    if (m) return m[1] + ' ' + m[2];
+  }
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return s;
+  return formatInSeoul(d, true);
+}
+function fmtDateOnly(raw){
+  if (!raw) return '';
+  const s = String(raw);
+  const m = isUtcIsoString(s) ? null : s.match(/^\d{4}-\d{2}-\d{2}/);
+  if (m) return m[0];
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return s;
+  return formatInSeoul(d, false);
+}
+function formatInSeoul(d, withTime){
+  const parts = new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  }).formatToParts(d);
+  const get = t => (parts.find(p => p.type === t) || {}).value || '';
+  const datePart = get('year') + '-' + get('month') + '-' + get('day');
+  return withTime ? datePart + ' ' + get('hour') + ':' + get('minute') : datePart;
+}
+function wishSortKey(it){
+  const datePart = fmtDateOnly(it['희망일자']) || '0000-00-00';
+  const timeMatch = String(it['희망시간'] || '').match(/(\d{2}:\d{2})/);
+  return datePart + ' ' + (timeMatch ? timeMatch[1] : '00:00');
 }
 
 /* ---------- 관리자: 상세/검토 ---------- */
@@ -611,14 +671,14 @@ function openDetail(id){
   if (!it) return;
   state.activeId = id;
   $('#mTitle').textContent = (it['학과'] || '(학과 미기재)') + ' · ' + (it['교수명'] || '');
-  $('#mMeta').textContent = it['id'] + ' · 접수 ' + it['접수일시'];
+  $('#mMeta').textContent = it['id'] + ' · 접수 ' + fmtDateTime(it['접수일시']);
   $('#mBody').innerHTML = [
     ['희망일시', wishDateTime(it)],
     ['희망장소', it['희망장소']], ['참여대상', it['참여대상']], ['예상인원', it['예상인원']],
     ['협조요청', it['협조요청']],
     ['비고', it['비고']],
     ['현재 상태', it['상태']],
-    ['이전 검토', [it['검토자'], it['검토일시'], it['검토의견']].filter(Boolean).join(' · ')]
+    ['이전 검토', [it['검토자'], fmtDateTime(it['검토일시']), it['검토의견']].filter(Boolean).join(' · ')]
   ].filter(([,v]) => v).map(([k,v]) =>
     '<div class="kv"><b>' + k + '</b><div class="val">' + esc(v) + '</div></div>'
   ).join('');
@@ -649,6 +709,21 @@ $all('.review-actions button').forEach(btn => {
       .catch(() => renderMsg('#reviewMsg', 'error', '처리 중 오류가 발생했습니다.'))
       .finally(() => $all('.review-actions button').forEach(b => b.disabled = false));
   });
+});
+
+$('#deleteBtn').addEventListener('click', () => {
+  const it = state.items.find(x => x['id'] === state.activeId);
+  const label = it ? (it['학과'] + ' · ' + it['교수명']) : state.activeId;
+  if (!confirm('정말로 이 신청을 삭제할까요?\n(' + label + ')\n삭제하면 되돌릴 수 없습니다.')) return;
+  $('#deleteBtn').disabled = true;
+  apiPost({ action:'delete', pin: state.pin, id: state.activeId })
+    .then(res => {
+      if (res.error) throw new Error(res.error);
+      $('#detailOverlay').hidden = true;
+      enterAdmin(state.pin, true);
+    })
+    .catch(() => renderMsg('#reviewMsg', 'error', '삭제 중 오류가 발생했습니다.'))
+    .finally(() => { $('#deleteBtn').disabled = false; });
 });
 
 /* ---------- 관리자: 엑셀 다운로드 ---------- */

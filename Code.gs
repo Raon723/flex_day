@@ -58,6 +58,12 @@ function doPost(e) {
       return json({ ok: true, accepting: isAccepting_() });
     }
 
+    if (action === 'delete') {
+      if (body.pin !== ADMIN_PIN) return json({ error: 'unauthorized' });
+      deleteApplication(body.id);
+      return json({ ok: true });
+    }
+
     return json({ error: 'unknown_action' });
   } catch (err) {
     return json({ error: String(err) });
@@ -95,7 +101,10 @@ function submitApplication(data) {
 
     const row = HEADERS.map(function (h) {
       if (h === 'id') return id;
-      if (h === '접수일시') return Utilities.formatDate(now, 'Asia/Seoul', 'yyyy-MM-dd HH:mm');
+      // 앞에 붙인 작은따옴표(')는 구글 시트가 날짜/숫자로 자동 변환하지 못하게 "텍스트 강제" 표시입니다.
+      // (실제 저장/조회되는 값에는 따옴표가 남지 않습니다.)
+      if (h === '접수일시') return "'" + Utilities.formatDate(now, 'Asia/Seoul', 'yyyy-MM-dd HH:mm');
+      if (h === '희망일자') return data[h] ? "'" + data[h] : '';
       if (h === '상태') return '접수';
       if (h === '검토자' || h === '검토일시' || h === '검토의견') return '';
       return data[h] != null ? data[h] : '';
@@ -144,9 +153,28 @@ function updateStatus(id, status, reviewer, comment) {
         sheet.getRange(rowIndex, statusCol + 1).setValue(status);
         sheet.getRange(rowIndex, reviewerCol + 1).setValue(reviewer);
         sheet.getRange(rowIndex, reviewedAtCol + 1).setValue(
-          Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm')
+          "'" + Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm')
         );
         sheet.getRange(rowIndex, commentCol + 1).setValue(comment);
+        return;
+      }
+    }
+    throw new Error('id_not_found');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteApplication(id) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sheet = getSheet_();
+    const values = sheet.getDataRange().getValues();
+    const idCol = values[0].indexOf('id');
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][idCol] === id) {
+        sheet.deleteRow(i + 1);
         return;
       }
     }
