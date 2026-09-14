@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>비교과 FLEX-day 온라인 접수</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --accent:#3454d1;
+    --accent-dark:#2740a8;
+    --bg:#f5f6fa;
+    --card:#ffffff;
+    --text:#1f2433;
+    --muted:#6b7280;
+    --border:#e3e5ec;
+    --ok:#1a8754;
+    --ok-bg:#e6f6ee;
+    --warn:#b7791f;
+    --warn-bg:#fdf3dd;
+    --info:#2563eb;
+    --info-bg:#e8eefd;
+    --bad:#c0392b;
+    --bad-bg:#fbe9e7;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",-apple-system,BlinkMacSystemFont,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    line-height:1.55;
+  }
+  .wrap{max-width:880px;margin:0 auto;padding:28px 18px 60px;}
+  header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px;flex-wrap:wrap;}
+  header.top h1{font-size:1.35rem;margin:0;}
+  header.top .sub{color:var(--muted);font-size:.88rem;margin-top:4px;}
+  nav.tabs{display:flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:999px;padding:4px;}
+  nav.tabs button{
+    border:none;background:transparent;padding:8px 16px;border-radius:999px;
+    font-size:.86rem;color:var(--muted);cursor:pointer;font-weight:600;
+  }
+  nav.tabs button.active{background:var(--accent);color:#fff;}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px;margin-bottom:18px;}
+  .card h2{font-size:1.05rem;margin:0 0 4px;}
+  .card .hint{color:var(--muted);font-size:.85rem;margin-bottom:16px;}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .grid .full{grid-column:1 / -1;}
+  @media (max-width:560px){.grid{grid-template-columns:1fr;}}
+
+  label{display:block;font-size:.84rem;font-weight:600;margin-bottom:6px;}
+  label .req{color:var(--bad);margin-left:2px;}
+  input[type=text],input[type=email],input[type=tel],input[type=number],
+  input[type=date],input[type=time],select,textarea{
+    width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:9px;
+    font-size:.92rem;font-family:inherit;background:#fff;color:var(--text);
+  }
+  textarea{resize:vertical;min-height:70px;}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;}
+  .field{margin-bottom:14px;}
+  .time-row{display:flex;gap:8px;align-items:center;}
+  .time-row span{color:var(--muted);font-size:.85rem;}
+
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    background:var(--accent);color:#fff;border:none;padding:11px 20px;
+    border-radius:9px;font-size:.92rem;font-weight:700;cursor:pointer;
+  }
+  .btn:hover{background:var(--accent-dark);}
+  .btn.secondary{background:#fff;color:var(--text);border:1px solid var(--border);}
+  .btn.secondary:hover{background:#f1f2f6;}
+  .btn.ok{background:var(--ok);}
+  .btn.warn{background:var(--warn);}
+  .btn.bad{background:var(--bad);}
+  .btn:disabled{opacity:.55;cursor:not-allowed;}
+  .btn.block{width:100%;}
+
+  .msg{padding:12px 14px;border-radius:9px;font-size:.86rem;margin-bottom:14px;}
+  .msg.error{background:var(--bad-bg);color:var(--bad);}
+  .msg.ok{background:var(--ok-bg);color:var(--ok);}
+
+  .success-box{text-align:center;padding:30px 10px;}
+  .success-box .big{font-size:2rem;margin-bottom:8px;}
+  .success-box .idline{font-family:monospace;background:#f1f2f6;padding:6px 12px;border-radius:8px;display:inline-block;margin:10px 0 18px;font-size:.9rem;}
+
+  .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.76rem;font-weight:700;}
+  .badge.접수{background:#eef0f5;color:#555;}
+  .badge.검토중{background:var(--info-bg);color:var(--info);}
+  .badge.승인{background:var(--ok-bg);color:var(--ok);}
+  .badge.반려{background:var(--bad-bg);color:var(--bad);}
+
+  .pin-box{max-width:340px;margin:40px auto;text-align:center;}
+  .pin-box input{text-align:center;letter-spacing:2px;font-size:1.1rem;}
+
+  .stat-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;}
+  @media (max-width:640px){.stat-row{grid-template-columns:repeat(2,1fr);}}
+  .stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;}
+  .stat .n{font-size:1.4rem;font-weight:800;}
+  .stat .l{font-size:.76rem;color:var(--muted);margin-top:2px;}
+
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+  .toolbar input[type=text]{flex:1;min-width:160px;}
+  .toolbar select{width:auto;}
+
+  table{width:100%;border-collapse:collapse;font-size:.86rem;}
+  th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--border);}
+  th{color:var(--muted);font-weight:700;font-size:.78rem;white-space:nowrap;}
+  tr.row{cursor:pointer;}
+  tr.row:hover{background:#fafbff;}
+  .empty{color:var(--muted);text-align:center;padding:40px 0;font-size:.9rem;}
+
+  .overlay{position:fixed;inset:0;background:rgba(20,22,30,.45);display:flex;align-items:flex-start;justify-content:center;padding:30px 14px;overflow:auto;z-index:50;}
+  .modal{background:#fff;border-radius:16px;max-width:640px;width:100%;padding:26px;}
+  .modal h3{margin:0 0 2px;font-size:1.1rem;}
+  .modal .meta{color:var(--muted);font-size:.82rem;margin-bottom:16px;}
+  .kv{display:grid;grid-template-columns:110px 1fr;gap:6px 12px;font-size:.88rem;margin-bottom:6px;}
+  .kv b{color:var(--muted);font-weight:600;}
+  .kv .val{white-space:pre-wrap;}
+  .modal .section{border-top:1px solid var(--border);margin-top:16px;padding-top:16px;}
+  .close-x{float:right;background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--muted);}
+  .review-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+
+  footer.note{color:var(--muted);font-size:.78rem;text-align:center;margin-top:30px;}
+  a.admin-link{color:var(--muted);font-size:.78rem;}
+  [hidden]{display:none!important;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>비교과 FLEX-day 온라인 접수</h1>
+      <div class="sub">학생성공·상담센터</div>
+    </div>
+    <nav class="tabs">
+      <button id="tabApplyBtn" class="active">학과 신청</button>
+      <button id="tabAdminBtn">센터 관리자</button>
+    </nav>
+  </header>
+
+  <!-- ===================== 신청 화면 ===================== -->
+  <section id="applyView">
+
+    <div id="applySuccess" class="card success-box" hidden>
+      <div class="big">✅</div>
+      <h2>신청이 접수되었습니다</h2>
+      <div class="idline" id="successId"></div>
+      <p class="hint">신청번호를 캡처해 두시면 문의 시 빠르게 확인해 드릴 수 있습니다.</p>
+      <button class="btn secondary" id="newApplyBtn">새 신청서 작성</button>
+    </div>
+
+    <form id="applyForm">
+      <div class="card">
+        <h2>신청자 정보</h2>
+        <div class="grid">
+          <div class="field"><label>학과(부)명<span class="req">*</span></label>
+            <input type="text" name="학과" required placeholder="예: 간호학과" /></div>
+          <div class="field"><label>교수명<span class="req">*</span></label>
+            <input type="text" name="교수명" required placeholder="담당 교수명" /></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>프로그램 정보</h2>
+        <div class="grid">
+          <div class="field"><label>희망 일자<span class="req">*</span></label>
+            <input type="date" name="희망일자" required /></div>
+          <div class="field full"><label>희망 시간</label>
+            <div class="time-row">
+              <input type="time" name="시작시간" />
+              <span>~</span>
+              <input type="time" name="종료시간" />
+            </div></div>
+          <div class="field"><label>희망 장소</label>
+            <input type="text" name="희망장소" placeholder="예: 동산관 세미나실" /></div>
+          <div class="field"><label>참여 대상</label>
+            <input type="text" name="참여대상" placeholder="예: 1학년 전체" /></div>
+          <div class="field"><label>예상 참여 인원</label>
+            <input type="number" name="예상인원" min="0" placeholder="명" /></div>
+          <div class="field full"><label>센터 협조·지원 요청사항</label>
+            <textarea name="협조요청" placeholder="공간, 홍보, 예산 등 센터에 요청할 사항"></textarea></div>
+          <div class="field full"><label>비고</label>
+            <textarea name="비고"></textarea></div>
+        </div>
+      </div>
+
+      <div id="applyMsg"></div>
+      <button type="submit" class="btn block" id="submitBtn">신청서 제출</button>
+    </form>
+  </section>
+
+  <!-- ===================== 관리자 화면 ===================== -->
+  <section id="adminView" hidden>
+
+    <div id="pinScreen" class="card pin-box">
+      <h2>센터 관리자 로그인</h2>
+      <div class="hint">관리자 PIN을 입력해 주세요.</div>
+      <div class="field"><input type="text" id="pinInput" inputmode="numeric" placeholder="PIN" /></div>
+      <div id="pinMsg"></div>
+      <button class="btn block" id="pinSubmit">확인</button>
+    </div>
+
+    <div id="adminPanel" hidden>
+      <div class="stat-row">
+        <div class="stat"><div class="n" id="stAll">0</div><div class="l">전체</div></div>
+        <div class="stat"><div class="n" id="st접수">0</div><div class="l">접수</div></div>
+        <div class="stat"><div class="n" id="st검토중">0</div><div class="l">검토중</div></div>
+        <div class="stat"><div class="n" id="st승인">0</div><div class="l">승인</div></div>
+        <div class="stat"><div class="n" id="st반려">0</div><div class="l">반려</div></div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <input type="text" id="searchInput" placeholder="학과, 교수명 검색" />
+          <select id="statusFilter">
+            <option value="">전체 상태</option>
+            <option>접수</option>
+            <option>검토중</option>
+            <option>승인</option>
+            <option>반려</option>
+          </select>
+          <button class="btn secondary" id="refreshBtn">새로고침</button>
+          <button class="btn secondary" id="exportBtn">엑셀 다운로드</button>
+        </div>
+
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>접수일시</th><th>학과</th><th>교수명</th>
+                <th>희망일자</th><th>인원</th><th>상태</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+        <div class="empty" id="emptyMsg" hidden>표시할 신청 건이 없습니다.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="note">문의: 학생성공·상담센터 · <a href="#" class="admin-link" id="footerAdminLink">관리자 화면</a></footer>
+</div>
+
+<div class="overlay" id="detailOverlay" hidden>
+  <div class="modal">
+    <button class="close-x" id="closeModal">×</button>
+    <h3 id="mTitle"></h3>
+    <div class="meta" id="mMeta"></div>
+    <div id="mBody"></div>
+
+    <div class="section">
+      <label>검토자</label>
+      <input type="text" id="reviewerInput" placeholder="검토자 성명" />
+      <div style="height:10px"></div>
+      <label>검토 의견</label>
+      <textarea id="commentInput" placeholder="반려 시 사유를 남겨주세요."></textarea>
+      <div id="reviewMsg"></div>
+      <div class="review-actions">
+        <button class="btn secondary" data-status="검토중">검토중으로 표시</button>
+        <button class="btn ok" data-status="승인">승인</button>
+        <button class="btn bad" data-status="반려">반려</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============== 설정 ==============
+   Apps Script 웹앱 배포 후 발급받은 /exec URL을 아래에 붙여넣으세요.
+   (README.md 참고) */
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby3izeRTJKyLYb-xtyj8vIi2SvsqwDWiR8jqACq-AnNbOxXNccVc2PDcCCVhbmzfn9ahA/exec';
+
+const state = { pin: '', items: [], filtered: [], activeId: null };
+
+/* ---------- 공통 유틸 ---------- */
+function $(sel){ return document.querySelector(sel); }
+function $all(sel){ return Array.from(document.querySelectorAll(sel)); }
+
+function apiGet(params){
+  const url = APPS_SCRIPT_URL + '?' + new URLSearchParams(params).toString();
+  return fetch(url).then(r => {
+    if (!r.ok) throw new Error('http_' + r.status);
+    return r.json();
+  });
+}
+function apiPost(payload){
+  return fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // preflight 회피
+    body: JSON.stringify(payload)
+  }).then(r => {
+    if (!r.ok) throw new Error('http_' + r.status);
+    return r.json();
+  });
+}
+
+/* ---------- 탭 전환 ---------- */
+function showApply(){
+  $('#applyView').hidden = false;
+  $('#adminView').hidden = true;
+  $('#tabApplyBtn').classList.add('active');
+  $('#tabAdminBtn').classList.remove('active');
+  location.hash = '';
+}
+function showAdmin(){
+  $('#applyView').hidden = true;
+  $('#adminView').hidden = false;
+  $('#tabApplyBtn').classList.remove('active');
+  $('#tabAdminBtn').classList.add('active');
+  location.hash = 'admin';
+  if (state.pin) enterAdmin(state.pin, true);
+}
+$('#tabApplyBtn').addEventListener('click', showApply);
+$('#tabAdminBtn').addEventListener('click', showAdmin);
+$('#footerAdminLink').addEventListener('click', e => { e.preventDefault(); showAdmin(); });
+if (location.hash === '#admin') showAdmin();
+
+/* ---------- 신청 폼 ---------- */
+$('#applyForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  if (APPS_SCRIPT_URL.indexOf('REPLACE_WITH') === 0){
+    renderMsg('#applyMsg', 'error', '아직 Apps Script 주소가 연결되지 않았습니다. (관리자에게 문의)');
+    return;
+  }
+  const data = {};
+  new FormData(e.target).forEach((v,k) => data[k] = v);
+  data['희망시간'] = (data['시작시간']||'') + (data['종료시간'] ? (' ~ ' + data['종료시간']) : '');
+  delete data['시작시간']; delete data['종료시간'];
+
+  const btn = $('#submitBtn');
+  btn.disabled = true; btn.textContent = '제출 중...';
+  $('#applyMsg').innerHTML = '';
+
+  apiPost({ action:'submit', data: data })
+    .then(res => {
+      if (res.error) throw new Error(res.error);
+      $('#applyForm').hidden = true;
+      $('#successId').textContent = res.id;
+      $('#applySuccess').hidden = false;
+    })
+    .catch(() => {
+      renderMsg('#applyMsg', 'error', '제출 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+    })
+    .finally(() => { btn.disabled = false; btn.textContent = '신청서 제출'; });
+});
+$('#newApplyBtn').addEventListener('click', () => {
+  $('#applyForm').reset();
+  $('#applyForm').hidden = false;
+  $('#applySuccess').hidden = true;
+});
+function renderMsg(sel, kind, text){
+  $(sel).innerHTML = '<div class="msg ' + kind + '">' + text + '</div>';
+}
+
+/* ---------- 관리자: PIN ---------- */
+$('#pinSubmit').addEventListener('click', () => {
+  const pin = $('#pinInput').value.trim();
+  if (!pin) return;
+  enterAdmin(pin, false);
+});
+$('#pinInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#pinSubmit').click(); });
+
+function enterAdmin(pin, silent){
+  if (APPS_SCRIPT_URL.indexOf('REPLACE_WITH') === 0){
+    if (!silent) renderMsg('#pinMsg', 'error', 'Apps Script 주소가 아직 연결되지 않았습니다. index.html의 APPS_SCRIPT_URL 값을 배포된 웹앱 주소로 바꿔주세요.');
+    return;
+  }
+  if (!silent){ $('#pinSubmit').disabled = true; $('#pinSubmit').textContent = '확인 중...'; }
+  apiGet({ action:'list', pin: pin })
+    .then(res => {
+      if (res.error){
+        state.pin = '';
+        renderMsg('#pinMsg', 'error', 'PIN이 올바르지 않습니다.');
+        $('#pinScreen').hidden = false; $('#adminPanel').hidden = true;
+        return;
+      }
+      state.pin = pin;
+      try { sessionStorage.setItem('flexday_pin', pin); } catch(e){}
+      state.items = res.items || [];
+      $('#pinScreen').hidden = true; $('#adminPanel').hidden = false;
+      renderTable();
+    })
+    .catch(err => {
+      console.error('admin login failed:', err);
+      if (!silent) renderMsg('#pinMsg', 'error',
+        '연결 중 오류가 발생했습니다. Apps Script 배포 URL·접근 권한을 확인해 주세요. (자세한 원인: 브라우저 개발자도구 콘솔 참고 — ' + err.message + ')');
+    })
+    .finally(() => {
+      if (!silent){ $('#pinSubmit').disabled = false; $('#pinSubmit').textContent = '확인'; }
+    });
+}
+try {
+  const saved = sessionStorage.getItem('flexday_pin');
+  if (saved) $('#pinInput').value = saved;
+} catch(e){}
+
+/* ---------- 관리자: 목록/필터 ---------- */
+$('#refreshBtn').addEventListener('click', () => enterAdmin(state.pin, true));
+$('#searchInput').addEventListener('input', renderTable);
+$('#statusFilter').addEventListener('change', renderTable);
+
+function renderTable(){
+  const q = $('#searchInput').value.trim().toLowerCase();
+  const statusF = $('#statusFilter').value;
+  const items = state.items.filter(it => {
+    if (statusF && it['상태'] !== statusF) return false;
+    if (!q) return true;
+    const hay = [it['학과'], it['교수명']].join(' ').toLowerCase();
+    return hay.indexOf(q) !== -1;
+  });
+  state.filtered = items;
+
+  const counts = { 전체: state.items.length, 접수:0, 검토중:0, 승인:0, 반려:0 };
+  state.items.forEach(it => { if (counts[it['상태']] != null) counts[it['상태']]++; });
+  $('#stAll').textContent = counts.전체;
+  $('#st접수').textContent = counts.접수;
+  $('#st검토중').textContent = counts.검토중;
+  $('#st승인').textContent = counts.승인;
+  $('#st반려').textContent = counts.반려;
+
+  const tbody = $('#tableBody');
+  tbody.innerHTML = '';
+  $('#emptyMsg').hidden = items.length > 0;
+  items.forEach(it => {
+    const tr = document.createElement('tr');
+    tr.className = 'row';
+    tr.innerHTML =
+      '<td>' + esc(it['접수일시']) + '</td>' +
+      '<td>' + esc(it['학과']) + '</td>' +
+      '<td>' + esc(it['교수명']) + '</td>' +
+      '<td>' + esc(it['희망일자']) + '</td>' +
+      '<td>' + esc(it['예상인원']) + '</td>' +
+      '<td><span class="badge ' + esc(it['상태']) + '">' + esc(it['상태']) + '</span></td>';
+    tr.addEventListener('click', () => openDetail(it['id']));
+    tbody.appendChild(tr);
+  });
+}
+function esc(v){
+  return String(v == null ? '' : v).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+/* ---------- 관리자: 상세/검토 ---------- */
+function openDetail(id){
+  const it = state.items.find(x => x['id'] === id);
+  if (!it) return;
+  state.activeId = id;
+  $('#mTitle').textContent = (it['학과'] || '(학과 미기재)') + ' · ' + (it['교수명'] || '');
+  $('#mMeta').textContent = it['id'] + ' · 접수 ' + it['접수일시'];
+  $('#mBody').innerHTML = [
+    ['희망일자', it['희망일자']], ['희망시간', it['희망시간']],
+    ['희망장소', it['희망장소']], ['참여대상', it['참여대상']], ['예상인원', it['예상인원']],
+    ['협조요청', it['협조요청']],
+    ['비고', it['비고']],
+    ['현재 상태', it['상태']],
+    ['이전 검토', [it['검토자'], it['검토일시'], it['검토의견']].filter(Boolean).join(' · ')]
+  ].filter(([,v]) => v).map(([k,v]) =>
+    '<div class="kv"><b>' + k + '</b><div class="val">' + esc(v) + '</div></div>'
+  ).join('');
+  $('#reviewerInput').value = it['검토자'] || '';
+  $('#commentInput').value = '';
+  $('#reviewMsg').innerHTML = '';
+  $('#detailOverlay').hidden = false;
+}
+$('#closeModal').addEventListener('click', () => $('#detailOverlay').hidden = true);
+$('#detailOverlay').addEventListener('click', e => { if (e.target.id === 'detailOverlay') $('#detailOverlay').hidden = true; });
+
+$all('.review-actions button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const status = btn.getAttribute('data-status');
+    const reviewer = $('#reviewerInput').value.trim();
+    const comment = $('#commentInput').value.trim();
+    if (status === '반려' && !comment){
+      renderMsg('#reviewMsg', 'error', '반려 시에는 검토 의견을 입력해 주세요.');
+      return;
+    }
+    $all('.review-actions button').forEach(b => b.disabled = true);
+    apiPost({ action:'updateStatus', pin: state.pin, id: state.activeId, status, reviewer, comment })
+      .then(res => {
+        if (res.error) throw new Error(res.error);
+        $('#detailOverlay').hidden = true;
+        enterAdmin(state.pin, true);
+      })
+      .catch(() => renderMsg('#reviewMsg', 'error', '처리 중 오류가 발생했습니다.'))
+      .finally(() => $all('.review-actions button').forEach(b => b.disabled = false));
+  });
+});
+
+/* ---------- 관리자: 엑셀 다운로드 ---------- */
+$('#exportBtn').addEventListener('click', () => {
+  if (typeof XLSX === 'undefined') {
+    alert('엑셀 라이브러리를 불러오지 못했습니다. 네트워크 연결을 확인하거나 잠시 후 다시 시도해 주세요.');
+    return;
+  }
+  const rows = (state.filtered.length ? state.filtered : state.items).map(it => ({...it}));
+  if (!rows.length) return;
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '신청현황');
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'FLEXday_신청현황_' + today + '.xlsx');
+});
+</script>
+</body>
+</html>

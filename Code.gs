@@ -1,0 +1,145 @@
+/**
+ * FLEX-day 비교과 프로그램 학과별 온라인 접수 시스템 - Apps Script 백엔드
+ * -----------------------------------------------------------------
+ * 이 스크립트를 "이 스프레드시트에 바인딩된" Apps Script 프로젝트로 붙여넣고
+ * 웹앱으로 배포하면, index.html이 이 URL로 제출/조회/상태변경 요청을 보냅니다.
+ *
+ * 배포 방법은 README.md를 참고하세요.
+ */
+
+// ⚠️ 반드시 변경하세요. 관리자 화면 진입 및 승인/반려에 사용되는 PIN입니다.
+// (완전한 보안 수단은 아니며, 관리자 링크를 아는 사람만 접근한다는 정도의 가벼운 방어입니다.)
+const ADMIN_PIN = '0007';
+
+const SHEET_NAME = '신청현황';
+
+const HEADERS = [
+  'id', '접수일시', '학과', '교수명',
+  '희망일자', '희망시간', '희망장소', '참여대상', '예상인원',
+  '협조요청', '비고',
+  '상태', '검토자', '검토일시', '검토의견'
+];
+
+function doGet(e) {
+  try {
+    const action = (e.parameter.action || 'list');
+    if (action === 'ping') return json({ ok: true });
+    if (action === 'list') {
+      if (e.parameter.pin !== ADMIN_PIN) return json({ error: 'unauthorized' });
+      return json({ ok: true, items: listApplications() });
+    }
+    return json({ error: 'unknown_action' });
+  } catch (err) {
+    return json({ error: String(err) });
+  }
+}
+
+function doPost(e) {
+  try {
+    const body = JSON.parse((e.postData && e.postData.contents) || '{}');
+    const action = body.action;
+
+    if (action === 'submit') {
+      const id = submitApplication(body.data || {});
+      return json({ ok: true, id: id });
+    }
+
+    if (action === 'updateStatus') {
+      if (body.pin !== ADMIN_PIN) return json({ error: 'unauthorized' });
+      updateStatus(body.id, body.status, body.reviewer || '', body.comment || '');
+      return json({ ok: true });
+    }
+
+    return json({ error: 'unknown_action' });
+  } catch (err) {
+    return json({ error: String(err) });
+  }
+}
+
+function getSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(HEADERS);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function submitApplication(data) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sheet = getSheet_();
+    const now = new Date();
+    const id = 'FLEX-' + Utilities.formatDate(now, 'Asia/Seoul', 'yyyyMMdd-HHmmss') +
+      '-' + Math.floor(Math.random() * 900 + 100);
+
+    const row = HEADERS.map(function (h) {
+      if (h === 'id') return id;
+      if (h === '접수일시') return Utilities.formatDate(now, 'Asia/Seoul', 'yyyy-MM-dd HH:mm');
+      if (h === '상태') return '접수';
+      if (h === '검토자' || h === '검토일시' || h === '검토의견') return '';
+      return data[h] != null ? data[h] : '';
+    });
+
+    sheet.appendRow(row);
+    return id;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function listApplications() {
+  const sheet = getSheet_();
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return [];
+  const headers = values[0];
+  return values.slice(1)
+    .map(function (r) {
+      const obj = {};
+      headers.forEach(function (h, i) { obj[h] = r[i]; });
+      return obj;
+    })
+    .filter(function (o) { return o.id; })
+    .sort(function (a, b) {
+      return String(b['접수일시'] || '').localeCompare(String(a['접수일시'] || ''));
+    });
+}
+
+function updateStatus(id, status, reviewer, comment) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sheet = getSheet_();
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0];
+    const idCol = headers.indexOf('id');
+    const statusCol = headers.indexOf('상태');
+    const reviewerCol = headers.indexOf('검토자');
+    const reviewedAtCol = headers.indexOf('검토일시');
+    const commentCol = headers.indexOf('검토의견');
+
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][idCol] === id) {
+        const rowIndex = i + 1;
+        sheet.getRange(rowIndex, statusCol + 1).setValue(status);
+        sheet.getRange(rowIndex, reviewerCol + 1).setValue(reviewer);
+        sheet.getRange(rowIndex, reviewedAtCol + 1).setValue(
+          Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm')
+        );
+        sheet.getRange(rowIndex, commentCol + 1).setValue(comment);
+        return;
+      }
+    }
+    throw new Error('id_not_found');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function json(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
