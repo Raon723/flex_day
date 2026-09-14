@@ -9,7 +9,7 @@
 
 // ⚠️ 반드시 변경하세요. 관리자 화면 진입 및 승인/반려에 사용되는 PIN입니다.
 // (완전한 보안 수단은 아니며, 관리자 링크를 아는 사람만 접근한다는 정도의 가벼운 방어입니다.)
-const ADMIN_PIN = '0007';
+const ADMIN_PIN = '0070';
 
 const SHEET_NAME = '신청현황';
 
@@ -24,6 +24,7 @@ function doGet(e) {
   try {
     const action = (e.parameter.action || 'list');
     if (action === 'ping') return json({ ok: true });
+    if (action === 'status') return json({ ok: true, accepting: isAccepting_() });
     if (action === 'list') {
       if (e.parameter.pin !== ADMIN_PIN) return json({ error: 'unauthorized' });
       return json({ ok: true, items: listApplications() });
@@ -40,6 +41,7 @@ function doPost(e) {
     const action = body.action;
 
     if (action === 'submit') {
+      if (!isAccepting_()) return json({ error: 'closed' });
       const id = submitApplication(body.data || {});
       return json({ ok: true, id: id });
     }
@@ -50,10 +52,25 @@ function doPost(e) {
       return json({ ok: true });
     }
 
+    if (action === 'setStatus') {
+      if (body.pin !== ADMIN_PIN) return json({ error: 'unauthorized' });
+      setAccepting_(!!body.accepting);
+      return json({ ok: true, accepting: isAccepting_() });
+    }
+
     return json({ error: 'unknown_action' });
   } catch (err) {
     return json({ error: String(err) });
   }
+}
+
+// 접수 마감/재개 상태는 스프레드시트가 아니라 스크립트 속성(Script Properties)에 저장합니다.
+function isAccepting_() {
+  const v = PropertiesService.getScriptProperties().getProperty('ACCEPTING');
+  return v === null ? true : v === 'true'; // 한 번도 설정한 적 없으면 기본값: 접수중
+}
+function setAccepting_(accepting) {
+  PropertiesService.getScriptProperties().setProperty('ACCEPTING', accepting ? 'true' : 'false');
 }
 
 function getSheet_() {

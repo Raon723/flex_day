@@ -157,6 +157,12 @@
   <!-- ===================== 신청 화면 ===================== -->
   <section id="applyView">
 
+    <div id="applyClosed" class="card success-box" hidden>
+      <div class="big">🔒</div>
+      <h2>비교과 FLEX-day 접수가 마감되었습니다</h2>
+      <p class="hint">문의 사항은 학생성공·상담센터로 연락해 주세요.</p>
+    </div>
+
     <div id="applySuccess" class="card success-box" hidden>
       <div class="big">✅</div>
       <h2>신청이 접수되었습니다</h2>
@@ -224,6 +230,14 @@
     </div>
 
     <div id="adminPanel" hidden>
+      <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:700;">접수 상태</div>
+          <div style="color:var(--muted);font-size:.85rem;margin-top:2px;" id="acceptingStatusText">확인 중...</div>
+        </div>
+        <button class="btn" id="toggleAcceptingBtn" disabled>확인 중...</button>
+      </div>
+
       <div class="stat-row">
         <div class="stat"><div class="n" id="stAll">0</div><div class="l">전체</div></div>
         <div class="stat"><div class="n" id="st접수">0</div><div class="l">접수</div></div>
@@ -234,7 +248,7 @@
 
       <div class="card">
         <div class="toolbar">
-          <input type="text" id="searchInput" placeholder="학과, 교수명 검색" />
+          <input type="text" id="searchInput" placeholder="학과, 교수명, 신청번호 검색" />
           <select id="statusFilter">
             <option value="">전체 상태</option>
             <option>접수</option>
@@ -251,7 +265,7 @@
             <thead>
               <tr>
                 <th>접수일시</th><th>학과</th><th>교수명</th>
-                <th>희망일자</th><th>인원</th><th>상태</th>
+                <th>희망일시</th><th>희망장소</th><th>인원</th><th>상태</th>
               </tr>
             </thead>
             <tbody id="tableBody"></tbody>
@@ -293,7 +307,7 @@
    Apps Script 웹앱 배포 후 발급받은 /exec URL을 아래에 붙여넣으세요.
    (README.md 참고) */
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby3izeRTJKyLYb-xtyj8vIi2SvsqwDWiR8jqACq-AnNbOxXNccVc2PDcCCVhbmzfn9ahA/exec';
-const APP_VERSION = 'v0.5'; // 버전 표시 (제목 옆 배지). 수정할 때마다 올려주세요.
+const APP_VERSION = 'v0.6'; // 버전 표시 (제목 옆 배지). 수정할 때마다 올려주세요.
 
 const state = { pin: '', items: [], filtered: [], activeId: null };
 
@@ -427,6 +441,11 @@ $('#applyForm').addEventListener('submit', function(e){
 
   apiPost({ action:'submit', data: data })
     .then(res => {
+      if (res.error === 'closed'){
+        $('#applyForm').hidden = true;
+        $('#applyClosed').hidden = false;
+        return;
+      }
       if (res.error) throw new Error(res.error);
       $('#applyForm').hidden = true;
       $('#successId').textContent = res.id;
@@ -445,6 +464,20 @@ $('#newApplyBtn').addEventListener('click', () => {
 function renderMsg(sel, kind, text){
   $(sel).innerHTML = '<div class="msg ' + kind + '">' + text + '</div>';
 }
+
+/* ---------- 접수 마감 여부 확인 (학과 화면 진입 시) ---------- */
+function showApplyClosed(){
+  $('#applyForm').hidden = true;
+  $('#applySuccess').hidden = true;
+  $('#applyClosed').hidden = false;
+}
+function checkAcceptingStatus(){
+  if (APPS_SCRIPT_URL.indexOf('REPLACE_WITH') === 0) return; // 미배포 상태에서는 기본값(접수중)으로 둠
+  apiGet({ action: 'status' })
+    .then(res => { if (res && res.accepting === false) showApplyClosed(); })
+    .catch(() => {}); // 조회 실패 시에는 막지 않고 평소대로 폼을 보여준다
+}
+checkAcceptingStatus();
 
 /* ---------- 관리자: PIN ---------- */
 $('#pinSubmit').addEventListener('click', () => {
@@ -473,6 +506,7 @@ function enterAdmin(pin, silent){
       state.items = res.items || [];
       $('#pinScreen').hidden = true; $('#adminPanel').hidden = false;
       renderTable();
+      refreshAcceptingStatus();
     })
     .catch(err => {
       console.error('admin login failed:', err);
@@ -488,8 +522,42 @@ try {
   if (saved) $('#pinInput').value = saved;
 } catch(e){}
 
+/* ---------- 관리자: 접수 마감/재개 ---------- */
+let acceptingState = true;
+function renderAcceptingUI(){
+  const txt = $('#acceptingStatusText');
+  const btn = $('#toggleAcceptingBtn');
+  btn.disabled = false;
+  if (acceptingState){
+    txt.textContent = '🟢 현재 접수를 받고 있습니다.';
+    btn.textContent = '접수 마감하기';
+    btn.className = 'btn bad';
+  } else {
+    txt.textContent = '🔴 접수가 마감된 상태입니다. 학과 화면에는 마감 안내가 표시됩니다.';
+    btn.textContent = '접수 다시 열기';
+    btn.className = 'btn ok';
+  }
+}
+function refreshAcceptingStatus(){
+  apiGet({ action: 'status' })
+    .then(res => { acceptingState = !(res && res.accepting === false); renderAcceptingUI(); })
+    .catch(() => { acceptingState = true; renderAcceptingUI(); });
+}
+$('#toggleAcceptingBtn').addEventListener('click', () => {
+  const btn = $('#toggleAcceptingBtn');
+  btn.disabled = true;
+  apiPost({ action:'setStatus', pin: state.pin, accepting: !acceptingState })
+    .then(res => {
+      if (res.error){ alert('처리 중 오류가 발생했습니다: ' + res.error); return; }
+      acceptingState = res.accepting;
+      renderAcceptingUI();
+    })
+    .catch(() => alert('처리 중 오류가 발생했습니다.'))
+    .finally(() => { btn.disabled = false; });
+});
+
 /* ---------- 관리자: 목록/필터 ---------- */
-$('#refreshBtn').addEventListener('click', () => enterAdmin(state.pin, true));
+$('#refreshBtn').addEventListener('click', () => { enterAdmin(state.pin, true); refreshAcceptingStatus(); });
 $('#searchInput').addEventListener('input', renderTable);
 $('#statusFilter').addEventListener('change', renderTable);
 
@@ -499,7 +567,7 @@ function renderTable(){
   const items = state.items.filter(it => {
     if (statusF && it['상태'] !== statusF) return false;
     if (!q) return true;
-    const hay = [it['학과'], it['교수명']].join(' ').toLowerCase();
+    const hay = [it['학과'], it['교수명'], it['id']].join(' ').toLowerCase();
     return hay.indexOf(q) !== -1;
   });
   state.filtered = items;
@@ -522,7 +590,8 @@ function renderTable(){
       '<td>' + esc(it['접수일시']) + '</td>' +
       '<td>' + esc(it['학과']) + '</td>' +
       '<td>' + esc(it['교수명']) + '</td>' +
-      '<td>' + esc(it['희망일자']) + '</td>' +
+      '<td>' + esc(wishDateTime(it)) + '</td>' +
+      '<td>' + esc(it['희망장소']) + '</td>' +
       '<td>' + esc(it['예상인원']) + '</td>' +
       '<td><span class="badge ' + esc(it['상태']) + '">' + esc(it['상태']) + '</span></td>';
     tr.addEventListener('click', () => openDetail(it['id']));
@@ -531,6 +600,9 @@ function renderTable(){
 }
 function esc(v){
   return String(v == null ? '' : v).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+function wishDateTime(it){
+  return [it['희망일자'], it['희망시간']].filter(Boolean).join(' ');
 }
 
 /* ---------- 관리자: 상세/검토 ---------- */
@@ -541,7 +613,7 @@ function openDetail(id){
   $('#mTitle').textContent = (it['학과'] || '(학과 미기재)') + ' · ' + (it['교수명'] || '');
   $('#mMeta').textContent = it['id'] + ' · 접수 ' + it['접수일시'];
   $('#mBody').innerHTML = [
-    ['희망일자', it['희망일자']], ['희망시간', it['희망시간']],
+    ['희망일시', wishDateTime(it)],
     ['희망장소', it['희망장소']], ['참여대상', it['참여대상']], ['예상인원', it['예상인원']],
     ['협조요청', it['협조요청']],
     ['비고', it['비고']],
