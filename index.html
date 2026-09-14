@@ -64,6 +64,18 @@
   .time-row{display:flex;gap:8px;align-items:center;}
   .time-row span{color:var(--muted);font-size:.85rem;}
 
+  .version-badge{
+    display:inline-block;vertical-align:middle;margin-left:6px;
+    font-size:.68rem;font-weight:700;color:var(--muted);
+    background:#eef0f5;border-radius:999px;padding:2px 9px;
+  }
+
+  .date-combo{position:relative;}
+  .date-combo input[type=text]{padding-right:42px;}
+  .date-combo-icon{position:absolute;right:0;top:0;bottom:0;width:40px;display:flex;align-items:center;justify-content:center;}
+  .date-combo-icon input[type=date]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;padding:0;margin:0;}
+  .date-combo-icon span{pointer-events:none;font-size:1rem;}
+
   .btn{
     display:inline-flex;align-items:center;justify-content:center;gap:6px;
     background:var(--accent);color:#fff;border:none;padding:11px 20px;
@@ -133,7 +145,7 @@
 
   <header class="top">
     <div>
-      <h1>비교과 FLEX-day 온라인 접수</h1>
+      <h1>비교과 FLEX-day 온라인 접수 <span class="version-badge" id="versionBadge"></span></h1>
       <div class="sub">학생성공·상담센터</div>
     </div>
     <nav class="tabs">
@@ -168,8 +180,14 @@
         <h2>프로그램 정보</h2>
         <div class="grid">
           <div class="field"><label>희망 일자<span class="req">*</span></label>
-            <input type="date" name="희망일자" required />
-            <div style="color:var(--muted);font-size:.78rem;margin-top:5px;">숫자를 직접 입력하지 마시고, 오른쪽 달력 아이콘을 눌러 날짜를 선택해 주세요.</div></div>
+            <div class="date-combo">
+              <input type="text" id="wishDateText" inputmode="numeric" autocomplete="off" placeholder="YYYY-MM-DD" required />
+              <div class="date-combo-icon">
+                <input type="date" id="wishDateNative" name="희망일자" tabindex="-1" required />
+                <span>📅</span>
+              </div>
+            </div>
+            <div style="color:var(--muted);font-size:.78rem;margin-top:5px;">숫자만 입력하면 자동으로 형식이 맞춰집니다. 달력 아이콘을 눌러 선택할 수도 있어요.</div></div>
           <div class="field full"><label>희망 시간</label>
             <div class="time-row">
               <input type="time" name="시작시간" />
@@ -275,12 +293,14 @@
    Apps Script 웹앱 배포 후 발급받은 /exec URL을 아래에 붙여넣으세요.
    (README.md 참고) */
 const APPS_SCRIPT_URL = 'REPLACE_WITH_YOUR_WEB_APP_URL';
+const APP_VERSION = 'v0.3'; // 버전 표시 (제목 옆 배지). 수정할 때마다 올려주세요.
 
 const state = { pin: '', items: [], filtered: [], activeId: null };
 
 /* ---------- 공통 유틸 ---------- */
 function $(sel){ return document.querySelector(sel); }
 function $all(sel){ return Array.from(document.querySelectorAll(sel)); }
+$('#versionBadge').textContent = APP_VERSION;
 
 function apiGet(params){
   const url = APPS_SCRIPT_URL + '?' + new URLSearchParams(params).toString();
@@ -321,6 +341,55 @@ $('#tabAdminBtn').addEventListener('click', showAdmin);
 $('#footerAdminLink').addEventListener('click', e => { e.preventDefault(); showAdmin(); });
 if (location.hash === '#admin') showAdmin();
 
+/* ---------- 희망 일자: 잘못된 날짜 자체를 입력할 수 없게 만드는 마스크 입력 ----------
+   원리: 키 입력마다 "지금까지 입력된 숫자"를 한 자리씩 다시 검사해서, 그 자리에 넣었을 때
+   달력상 있을 수 없는 값이 되는 자리는 조용히 무시한다. 그래서 8자리가 다 채워지는 순간
+   항상 실존하는 날짜(2월 30일 같은 것도 걸러짐)만 완성된다. */
+function appendDateDigit(cur, ch){
+  const pos = cur.length;
+  if (pos >= 8) return cur;
+  if (pos < 4) return cur + ch; // 연도 4자리는 그대로 허용
+  if (pos === 4){ // 월의 십의 자리: 0 또는 1만 가능
+    return (ch > '1') ? cur : cur + ch;
+  }
+  if (pos === 5){ // 월의 일의 자리: 01~12
+    const mm = Number(cur[4] + ch);
+    return (mm < 1 || mm > 12) ? cur : cur + ch;
+  }
+  if (pos === 6){ // 일의 십의 자리: 0~3만 가능
+    return (ch > '3') ? cur : cur + ch;
+  }
+  if (pos === 7){ // 일의 일의 자리: 해당 연/월의 실제 마지막 날짜까지만
+    const dd = Number(cur[6] + ch);
+    const year = Number(cur.slice(0,4));
+    const month = Number(cur.slice(4,6));
+    const lastDay = new Date(year, month, 0).getDate();
+    return (dd < 1 || dd > lastDay) ? cur : cur + ch;
+  }
+  return cur;
+}
+function sanitizeDateDigits(raw){
+  let out = '';
+  for (const ch of raw.replace(/\D/g, '').slice(0, 8)) out = appendDateDigit(out, ch);
+  return out;
+}
+function formatDateDigits(digits){
+  let out = digits.slice(0, 4);
+  if (digits.length > 4) out += '-' + digits.slice(4, 6);
+  if (digits.length > 6) out += '-' + digits.slice(6, 8);
+  return out;
+}
+const wishDateText = $('#wishDateText');
+const wishDateNative = $('#wishDateNative');
+wishDateText.addEventListener('input', () => {
+  const digits = sanitizeDateDigits(wishDateText.value);
+  wishDateText.value = formatDateDigits(digits);
+  wishDateNative.value = digits.length === 8 ? wishDateText.value : '';
+});
+wishDateNative.addEventListener('input', () => {
+  if (wishDateNative.value) wishDateText.value = wishDateNative.value; // 달력에서 선택한 값 반영
+});
+
 /* ---------- 신청 폼 ---------- */
 $('#applyForm').addEventListener('submit', function(e){
   e.preventDefault();
@@ -330,8 +399,8 @@ $('#applyForm').addEventListener('submit', function(e){
   }
   const dateInput = e.target.querySelector('input[name="희망일자"]');
   if (!dateInput.value){
-    renderMsg('#applyMsg', 'error', '희망 일자가 올바르지 않습니다. 직접 숫자를 입력하지 마시고, 입력란 오른쪽의 달력 아이콘을 눌러 날짜를 선택해 주세요.');
-    dateInput.focus();
+    renderMsg('#applyMsg', 'error', '희망 일자를 8자리 숫자(예: 20261015)로 입력하거나, 달력 아이콘을 눌러 선택해 주세요.');
+    wishDateText.focus();
     return;
   }
   const data = {};
