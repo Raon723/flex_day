@@ -197,31 +197,50 @@
       <div class="card">
         <h2>프로그램 정보</h2>
         <div class="grid">
-          <div class="field"><label>희망 일자<span class="req">*</span></label>
+          <div class="field full" style="margin-bottom:2px;">
+            <label style="margin-bottom:2px;">희망 일자·시간<span class="req">*</span></label>
+            <div style="color:var(--muted);font-size:.82rem;">희망 시간이 다른 학과와 겹칠 수 있으니, 1순위가 어려울 경우를 대비해 2순위도 함께 적어주시면 좋습니다. (2순위는 선택 사항)</div>
+          </div>
+
+          <div class="field"><label>1순위 일자<span class="req">*</span></label>
             <div class="date-combo">
-              <input type="text" id="wishDateText" inputmode="numeric" autocomplete="off" placeholder="YYYY-MM-DD" required />
+              <input type="text" id="wishDateText1" inputmode="numeric" autocomplete="off" placeholder="YYYY-MM-DD" required />
               <div class="date-combo-icon">
-                <input type="date" id="wishDateNative" name="희망일자" tabindex="-1" required />
+                <input type="date" id="wishDateNative1" name="희망일자1" tabindex="-1" required />
                 <span>📅</span>
               </div>
             </div>
             <div style="color:var(--muted);font-size:.78rem;margin-top:5px;">숫자만 입력하면 자동으로 형식이 맞춰집니다. 달력 아이콘을 눌러 선택할 수도 있어요.</div></div>
-          <div class="field full"><label>희망 시간</label>
+          <div class="field"><label>1순위 시간</label>
             <div class="time-row">
-              <input type="time" name="시작시간" id="startTime" />
+              <input type="time" name="시작시간1" id="startTime1" />
               <span>~</span>
-              <input type="time" name="종료시간" id="endTime" />
+              <input type="time" name="종료시간1" id="endTime1" />
             </div></div>
+
+          <div class="field"><label>2순위 일자</label>
+            <div class="date-combo">
+              <input type="text" id="wishDateText2" inputmode="numeric" autocomplete="off" placeholder="YYYY-MM-DD" />
+              <div class="date-combo-icon">
+                <input type="date" id="wishDateNative2" name="희망일자2" tabindex="-1" />
+                <span>📅</span>
+              </div>
+            </div></div>
+          <div class="field"><label>2순위 시간</label>
+            <div class="time-row">
+              <input type="time" name="시작시간2" id="startTime2" />
+              <span>~</span>
+              <input type="time" name="종료시간2" id="endTime2" />
+            </div></div>
+
           <div class="field"><label>희망 장소</label>
             <input type="text" name="희망장소" placeholder="예: 동산관 세미나실" /></div>
           <div class="field"><label>참여 대상</label>
             <input type="text" name="참여대상" placeholder="예: 1학년 전체" /></div>
           <div class="field"><label>예상 참여 인원</label>
             <input type="number" name="예상인원" min="0" placeholder="명" /></div>
-          <div class="field full"><label>센터 협조·지원 요청사항</label>
+          <div class="field full"><label>사전 협의할 사항</label>
             <textarea name="협조요청" placeholder="센터에 요청할 사항"></textarea></div>
-          <div class="field full"><label>비고</label>
-            <textarea name="비고"></textarea></div>
         </div>
       </div>
 
@@ -291,7 +310,7 @@
             <thead>
               <tr>
                 <th>접수일시</th><th>학과</th><th>교수명</th>
-                <th id="thWishDateTime" style="cursor:pointer;user-select:none;" title="클릭하면 희망일시 순으로 정렬됩니다">희망일시 <span id="wishSortArrow"></span></th>
+                <th id="thWishDateTime" style="cursor:pointer;user-select:none;" title="클릭하면 1순위 희망일시 순으로 정렬됩니다">희망일시 <span id="wishSortArrow"></span></th>
                 <th>희망장소</th><th>인원</th><th>상태</th>
               </tr>
             </thead>
@@ -342,7 +361,7 @@
    Apps Script 웹앱 배포 후 발급받은 /exec URL을 아래에 붙여넣으세요.
    (README.md 참고) */
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzD-CVIxzi1E5OXTN5H51Qv30rjkSLeOHd5ULWvAz-6k-_28GQ9hYuSDvZIZawKua9T/exec';
-const APP_VERSION = 'v0.9'; // 버전 표시 (제목 옆 배지). 수정할 때마다 올려주세요.
+const APP_VERSION = 'v1.0'; // 버전 표시 (제목 옆 배지). 수정할 때마다 올려주세요.
 
 const state = { pin: '', role: '', items: [], filtered: [], activeId: null };
 
@@ -447,18 +466,23 @@ function formatDateDigits(digits){
   if (digits.length > 6) out += '-' + digits.slice(6, 8);
   return out;
 }
-const wishDateText = $('#wishDateText');
-const wishDateNative = $('#wishDateNative');
-wishDateText.addEventListener('input', () => {
-  const digits = sanitizeDateDigits(wishDateText.value);
-  wishDateText.value = formatDateDigits(digits);
-  wishDateNative.value = digits.length === 8 ? wishDateText.value : '';
-});
-wishDateNative.addEventListener('input', () => {
-  if (wishDateNative.value) wishDateText.value = wishDateNative.value; // 달력에서 선택한 값 반영
-});
+function setupDateCombo(textId, nativeId){
+  const textEl = $('#' + textId);
+  const nativeEl = $('#' + nativeId);
+  textEl.addEventListener('input', () => {
+    const digits = sanitizeDateDigits(textEl.value);
+    textEl.value = formatDateDigits(digits);
+    nativeEl.value = digits.length === 8 ? textEl.value : '';
+  });
+  nativeEl.addEventListener('input', () => {
+    if (nativeEl.value) textEl.value = nativeEl.value; // 달력에서 선택한 값 반영
+  });
+  return textEl;
+}
+const wishDateText1 = setupDateCombo('wishDateText1', 'wishDateNative1');
+setupDateCombo('wishDateText2', 'wishDateNative2');
 
-/* ---------- 희망 시간: 시작 시간 입력 시 종료 시간을 50분 뒤로 자동 세팅 ---------- */
+/* ---------- 희망 시간: 시작 시간 입력 시 종료 시간을 50분 뒤로 자동 세팅 (1/2순위 각각) ---------- */
 function addMinutesToTime(hhmm, minutes){
   const [h, m] = hhmm.split(':').map(Number);
   const total = ((h * 60 + m + minutes) % (24 * 60) + 24 * 60) % (24 * 60);
@@ -466,10 +490,14 @@ function addMinutesToTime(hhmm, minutes){
   const mm = String(total % 60).padStart(2, '0');
   return hh + ':' + mm;
 }
-$('#startTime').addEventListener('input', () => {
-  const start = $('#startTime').value;
-  if (start) $('#endTime').value = addMinutesToTime(start, 50);
-});
+function setupTimeAutofill(startId, endId){
+  $('#' + startId).addEventListener('input', () => {
+    const start = $('#' + startId).value;
+    if (start) $('#' + endId).value = addMinutesToTime(start, 50);
+  });
+}
+setupTimeAutofill('startTime1', 'endTime1');
+setupTimeAutofill('startTime2', 'endTime2');
 
 /* ---------- 신청 폼 ---------- */
 $('#applyForm').addEventListener('submit', function(e){
@@ -478,16 +506,18 @@ $('#applyForm').addEventListener('submit', function(e){
     renderMsg('#applyMsg', 'error', '아직 Apps Script 주소가 연결되지 않았습니다. (관리자에게 문의)');
     return;
   }
-  const dateInput = e.target.querySelector('input[name="희망일자"]');
-  if (!dateInput.value){
-    renderMsg('#applyMsg', 'error', '희망 일자를 8자리 숫자(예: 20261015)로 입력하거나, 달력 아이콘을 눌러 선택해 주세요.');
-    wishDateText.focus();
+  const dateInput1 = e.target.querySelector('input[name="희망일자1"]');
+  if (!dateInput1.value){
+    renderMsg('#applyMsg', 'error', '1순위 희망 일자를 8자리 숫자(예: 20261015)로 입력하거나, 달력 아이콘을 눌러 선택해 주세요.');
+    wishDateText1.focus();
     return;
   }
   const data = {};
   new FormData(e.target).forEach((v,k) => data[k] = v);
-  data['희망시간'] = (data['시작시간']||'') + (data['종료시간'] ? (' ~ ' + data['종료시간']) : '');
-  delete data['시작시간']; delete data['종료시간'];
+  data['희망시간1'] = (data['시작시간1']||'') + (data['종료시간1'] ? (' ~ ' + data['종료시간1']) : '');
+  delete data['시작시간1']; delete data['종료시간1'];
+  data['희망시간2'] = (data['시작시간2']||'') + (data['종료시간2'] ? (' ~ ' + data['종료시간2']) : '');
+  delete data['시작시간2']; delete data['종료시간2'];
 
   const btn = $('#submitBtn');
   btn.disabled = true; btn.textContent = '제출 중...';
@@ -554,7 +584,8 @@ function renderLookupResult(it){
     ['신청번호', it['id']],
     ['학과(부)명', it['학과']],
     ['교수명', it['교수명']],
-    ['희망일시', wishDateTime(it)],
+    ['1순위 일시', wishDateTime(it)],
+    ['2순위 일시', wishDateTime2(it)],
     ['희망장소', it['희망장소']],
     ['접수일시', fmtDateTime(it['접수일시'])]
   ].filter(([,v]) => v).map(([k,v]) =>
@@ -747,13 +778,18 @@ function renderTable(){
   $('#emptyMsg').hidden = items.length > 0;
   items.forEach(it => {
     const dup = isDupItem(it, dupCounts);
+    const w1 = wishDateTime(it);
+    const w2 = wishDateTime2(it);
+    const wishCell = esc(w1) +
+      (w2 ? '<br><span style="color:var(--muted);font-size:.78rem;">2순위: ' + esc(w2) + '</span>' : '') +
+      (dup ? ' <span class="dup-badge" title="같은 날짜·시간(1순위 기준)에 다른 신청이 있습니다">⚠️ 중복 ' + dupCounts[w1] + '건</span>' : '');
     const tr = document.createElement('tr');
     tr.className = 'row' + (dup ? ' dup' : '');
     tr.innerHTML =
       '<td>' + esc(fmtDateTime(it['접수일시'])) + '</td>' +
       '<td>' + esc(it['학과']) + '</td>' +
       '<td>' + esc(it['교수명']) + '</td>' +
-      '<td>' + esc(wishDateTime(it)) + (dup ? ' <span class="dup-badge" title="같은 날짜·시간에 다른 신청이 있습니다">⚠️ 중복 ' + dupCounts[wishDateTime(it)] + '건</span>' : '') + '</td>' +
+      '<td>' + wishCell + '</td>' +
       '<td>' + esc(it['희망장소']) + '</td>' +
       '<td>' + esc(it['예상인원']) + '</td>' +
       '<td><span class="badge ' + esc(it['상태']) + '">' + esc(it['상태']) + '</span></td>';
@@ -764,8 +800,13 @@ function renderTable(){
 function esc(v){
   return String(v == null ? '' : v).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 }
+// 1순위 희망일시 (정렬·중복 감지의 기준이 되는 값)
 function wishDateTime(it){
-  return [fmtDateOnly(it['희망일자']), it['희망시간']].filter(Boolean).join(' ');
+  return [fmtDateOnly(it['희망일자1']), it['희망시간1']].filter(Boolean).join(' ');
+}
+// 2순위 희망일시 (선택 입력 — 없으면 빈 문자열)
+function wishDateTime2(it){
+  return [fmtDateOnly(it['희망일자2']), it['희망시간2']].filter(Boolean).join(' ');
 }
 // 구글 시트가 날짜 문자열을 자동으로 Date로 바꿔버리는 경우까지 대비해,
 // 어떤 형태로 오든 "YYYY-MM-DD HH:mm" / "YYYY-MM-DD"로 통일해서 보여준다.
@@ -805,8 +846,8 @@ function formatInSeoul(d, withTime){
   return withTime ? datePart + ' ' + get('hour') + ':' + get('minute') : datePart;
 }
 function wishSortKey(it){
-  const datePart = fmtDateOnly(it['희망일자']) || '0000-00-00';
-  const timeMatch = String(it['희망시간'] || '').match(/(\d{2}:\d{2})/);
+  const datePart = fmtDateOnly(it['희망일자1']) || '0000-00-00';
+  const timeMatch = String(it['희망시간1'] || '').match(/(\d{2}:\d{2})/);
   return datePart + ' ' + (timeMatch ? timeMatch[1] : '00:00');
 }
 
@@ -822,10 +863,10 @@ function openDetail(id){
     ? '<div class="msg error">⚠️ 같은 날짜·시간(' + esc(wishDateTime(it)) + ')에 다른 신청이 ' + (dupCounts[wishDateTime(it)] - 1) + '건 더 있습니다. 일정이 겹치지 않는지 확인해 주세요.</div>'
     : '';
   $('#mBody').innerHTML = dupWarning + [
-    ['희망일시', wishDateTime(it)],
+    ['1순위 일시', wishDateTime(it)],
+    ['2순위 일시', wishDateTime2(it)],
     ['희망장소', it['희망장소']], ['참여대상', it['참여대상']], ['예상인원', it['예상인원']],
-    ['협조요청', it['협조요청']],
-    ['비고', it['비고']],
+    ['사전 협의할 사항', it['협조요청']],
     ['현재 상태', it['상태']],
     ['이전 검토', [it['검토자'], fmtDateTime(it['검토일시']), it['검토의견']].filter(Boolean).join(' · ')]
   ].filter(([,v]) => v).map(([k,v]) =>

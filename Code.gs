@@ -24,8 +24,8 @@ const SHEET_NAME = '신청현황';
 
 const HEADERS = [
   'id', '접수일시', '학과', '교수명',
-  '희망일자', '희망시간', '희망장소', '참여대상', '예상인원',
-  '협조요청', '비고',
+  '희망일자1', '희망시간1', '희망일자2', '희망시간2', '희망장소', '참여대상', '예상인원',
+  '협조요청',
   '상태', '검토자', '검토일시', '검토의견'
 ];
 
@@ -106,11 +106,27 @@ function getSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
+  ensureHeaders_(sheet);
+  return sheet;
+}
+
+// 헤더 행이 아직 없으면 새로 만들고, 이미 있으면 HEADERS 중 그 시트에 없는 항목만
+// 맨 뒤에 이어붙인다. 기존 열은 순서·내용을 그대로 두므로, 나중에 신청서 항목을
+// 추가/삭제/이름 변경해도 이미 쌓인 데이터가 깨지지 않는다. (README "항목을 바꾸고
+// 싶을 때" 참고)
+function ensureHeaders_(sheet) {
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(HEADERS);
     sheet.setFrozenRows(1);
+    return HEADERS.slice();
   }
-  return sheet;
+  const existing = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const missing = HEADERS.filter(function (h) { return existing.indexOf(h) === -1; });
+  if (missing.length) {
+    sheet.getRange(1, existing.length + 1, 1, missing.length).setValues([missing]);
+    return existing.concat(missing);
+  }
+  return existing;
 }
 
 function submitApplication(data) {
@@ -118,16 +134,18 @@ function submitApplication(data) {
   lock.waitLock(30000);
   try {
     const sheet = getSheet_();
+    // 실제 저장은 (혹시 예전 항목이 남아있는) 시트의 현재 헤더 행 순서를 그대로 따른다.
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     const now = new Date();
     const id = 'FLEX-' + Utilities.formatDate(now, 'Asia/Seoul', 'yyyyMMdd-HHmmss') +
       '-' + Math.floor(Math.random() * 900 + 100);
 
-    const row = HEADERS.map(function (h) {
+    const row = headers.map(function (h) {
       if (h === 'id') return id;
       // 앞에 붙인 작은따옴표(')는 구글 시트가 날짜/숫자로 자동 변환하지 못하게 "텍스트 강제" 표시입니다.
       // (실제 저장/조회되는 값에는 따옴표가 남지 않습니다.)
       if (h === '접수일시') return "'" + Utilities.formatDate(now, 'Asia/Seoul', 'yyyy-MM-dd HH:mm');
-      if (h === '희망일자') return data[h] ? "'" + data[h] : '';
+      if (h === '희망일자1' || h === '희망일자2') return data[h] ? "'" + data[h] : '';
       if (h === '상태') return '접수';
       if (h === '검토자' || h === '검토일시' || h === '검토의견') return '';
       return data[h] != null ? data[h] : '';
@@ -172,8 +190,10 @@ function publicView_(it) {
     id: it['id'],
     학과: it['학과'],
     교수명: it['교수명'],
-    희망일자: it['희망일자'],
-    희망시간: it['희망시간'],
+    희망일자1: it['희망일자1'],
+    희망시간1: it['희망시간1'],
+    희망일자2: it['희망일자2'],
+    희망시간2: it['희망시간2'],
     희망장소: it['희망장소'],
     접수일시: it['접수일시'],
     상태: it['상태'],
